@@ -6,12 +6,13 @@ import { Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 import Image from "next/image";
+import { useRouter } from 'next/navigation';
 
 const HeroSection = () => {
     const [prompt, setPrompt] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
-
+    const router = useRouter();
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -95,6 +96,7 @@ const HeroSection = () => {
                         size="lg"
                         className="h-14 px-8 text-lg"
                         disabled={isLoading || !prompt.trim()}
+                        onClick={() => router.push('/projects')}
                     >
                         {isLoading ? (
                             <>
