@@ -96,7 +96,11 @@ const HeroSection = () => {
                         size="lg"
                         className="h-14 px-8 text-lg"
                         disabled={isLoading || !prompt.trim()}
-                        onClick={() => router.push('/projects')}
+                        onClick={() => {
+                            if (prompt.trim()) {
+                                router.push(`/projects?prompt=${encodeURIComponent(prompt.trim())}`);
+                            }
+                        }}
                     >
                         {isLoading ? (
                             <>
