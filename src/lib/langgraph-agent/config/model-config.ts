@@ -23,7 +23,7 @@ export const MODEL_CONFIGS = {
     },
     character_image_generation: {
         provider: 'openai' as const,
-        model: 'dall-e-3',
+        model: 'gpt-image-1',
         apiKey: process.env.OPENAI_API_KEY,
     },
     location_design: {
@@ -58,5 +58,4 @@ export function updateModelConfig(task: keyof typeof MODEL_CONFIGS, newConfig: P
     (MODEL_CONFIGS[task] as ModelConfig) = { ...MODEL_CONFIGS[task], ...newConfig };
 }
 
-// Example usage:
-// updateModelConfig('story_generation', { provider: 'anthropic', model: 'claude-3-haiku-20240307' });
+

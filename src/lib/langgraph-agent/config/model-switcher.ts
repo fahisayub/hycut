@@ -1,7 +1,8 @@
-import { MODEL_CONFIGS, updateModelConfig } from './model-config';
+import { MODEL_CONFIGS, updateModelConfig } from '../config/model-config';
+import { ChatOpenAI } from "@langchain/openai";
+import { ChatAnthropic } from "@langchain/anthropic";
 
 export const MODEL_SWITCHER = {
-    // Easy switching functions
     switchToOpenAI: (task: keyof typeof MODEL_CONFIGS, model: string) => {
         updateModelConfig(task, {
             provider: 'openai',
@@ -9,7 +10,6 @@ export const MODEL_SWITCHER = {
             apiKey: process.env.OPENAI_API_KEY
         });
     },
-
     switchToAnthropic: (task: keyof typeof MODEL_CONFIGS, model: string) => {
         updateModelConfig(task, {
             provider: 'anthropic',
@@ -17,7 +17,6 @@ export const MODEL_SWITCHER = {
             apiKey: process.env.ANTHROPIC_API_KEY
         });
     },
-
     switchToLocal: (task: keyof typeof MODEL_CONFIGS, model: string, baseUrl: string) => {
         updateModelConfig(task, {
             provider: 'local',
@@ -25,8 +24,6 @@ export const MODEL_SWITCHER = {
             baseUrl
         });
     },
-
-    // Batch switching
     switchAllToOpenAI: (model: string) => {
         Object.keys(MODEL_CONFIGS).forEach((task) => {
             updateModelConfig(task as keyof typeof MODEL_CONFIGS, {
@@ -36,7 +33,6 @@ export const MODEL_SWITCHER = {
             });
         });
     },
-
     switchAllToAnthropic: (model: string) => {
         Object.keys(MODEL_CONFIGS).forEach((task) => {
             updateModelConfig(task as keyof typeof MODEL_CONFIGS, {
@@ -48,7 +44,32 @@ export const MODEL_SWITCHER = {
     }
 };
 
-// Usage examples:
-// MODEL_SWITCHER.switchToOpenAI('story_generation', 'gpt-4o');
-// MODEL_SWITCHER.switchToAnthropic('script_writing', 'claude-3-haiku-20240307');
-// MODEL_SWITCHER.switchAllToOpenAI('gpt-4o-mini');
+export function getModelForTask(task: keyof typeof MODEL_CONFIGS): ChatOpenAI | ChatAnthropic {
+    const config = MODEL_CONFIGS[task];
+    switch (config.provider) {
+        case 'openai':
+            return new ChatOpenAI({
+                model: config.model,
+                apiKey: config.apiKey || process.env.OPENAI_API_KEY,
+                temperature: 0.7
+            });
+        case 'anthropic':
+            return new ChatAnthropic({
+                model: config.model,
+                apiKey: config.apiKey || process.env.ANTHROPIC_API_KEY,
+                temperature: 0.7
+            });
+        default:
+            if (!process.env.OPENAI_API_KEY) {
+                console.warn(`⚠️  No API key for ${config.provider}, and no OpenAI fallback available`);
+                throw new Error(`No API key configured for ${config.provider} and no OpenAI fallback`);
+            }
+            return new ChatOpenAI({
+                model: 'gpt-4o-mini',
+                apiKey: process.env.OPENAI_API_KEY,
+                temperature: 0.7
+            });
+    }
+}
+
+

@@ -1,58 +1,61 @@
-export type GenerationResult = {
-    story?: string;
-    script?: string;
-    characters?: string;
-    characterImages?: Record<string, string>;
-    locations?: string;
-    scenes?: string;
-    sceneImages?: string[];
-    generatedVideos?: string[];
-    finalVideo?: string;
-    currentStep?: string;
-};
-
-export type TaskStatus = 'pending' | 'generating' | 'completed' | 'error';
+import { StateCreator } from 'zustand';
 
 export interface TaskProgress {
     id: string;
     title: string;
-    status: TaskStatus;
+    description?: string;
+    status: 'pending' | 'generating' | 'completed' | 'error';
     progress: number;
     content?: string;
     error?: string;
+    icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+}
+
+export interface GenerationResult {
+    story?: string;
+    script?: string;
+    characters?: unknown;
+    characterImages?: { [key: string]: string };
+    locations?: string;
+    scenes?: unknown;
+    sceneImages?: string[];
+    generatedVideos?: string[];
+    voices?: unknown[];
+    finalVideo?: string;
+    currentStep?: string;
+    contentType?: string;
+    plan?: unknown[];
+    completedSteps?: string[];
+    progress?: {
+        currentStepProgress: number;
+        overallProgress: number;
+        estimatedTimeRemaining?: number;
+    };
+    errors?: unknown[];
 }
 
 export interface VideoSlice {
-    activePrompt: string;
-    result: GenerationResult;
     tasks: TaskProgress[];
-    setPrompt: (p: string) => void;
-    setResultPart: (partial: Partial<GenerationResult>) => void;
     setTasks: (tasks: TaskProgress[]) => void;
-    updateTask: (id: string, patch: Partial<TaskProgress>) => void;
-    resetTasks: () => void;
+    updateTask: (id: string, updates: Partial<TaskProgress>) => void;
+
+    result: GenerationResult;
+    setResult: (result: GenerationResult) => void;
+    setResultPart: (partialResult: Partial<GenerationResult>) => void;
+    clearResult: () => void;
 }
 
-export const initialTasks: TaskProgress[] = [
-    { id: 'story', title: 'Story Generation', status: 'pending', progress: 0 },
-    { id: 'script', title: 'Script Writing', status: 'pending', progress: 0 },
-    { id: 'voices', title: 'Voice Generation', status: 'pending', progress: 0 },
-    { id: 'characters', title: 'Character Design', status: 'pending', progress: 0 },
-    { id: 'character_images', title: 'Character Images', status: 'pending', progress: 0 },
-    { id: 'locations', title: 'Location Scouting', status: 'pending', progress: 0 },
-    { id: 'scenes', title: 'Scene Creation', status: 'pending', progress: 0 },
-    { id: 'scene_images', title: 'Scene Images', status: 'pending', progress: 0 },
-    { id: 'videos', title: 'Video Generation', status: 'pending', progress: 0 },
-    { id: 'film', title: 'Final Film', status: 'pending', progress: 0 },
-];
+export const createVideoSlice: StateCreator<VideoSlice, [], [], VideoSlice> = (set) => ({
+    tasks: [],
+    setTasks: (tasks) => set({ tasks }),
+    updateTask: (id, updates) => set((state) => ({
+        tasks: state.tasks.map(task => task.id === id ? { ...task, ...updates } : task)
+    })),
 
-export const createVideoSlice = (set: (fn: (state: unknown) => void) => void): VideoSlice => ({
-    activePrompt: '',
     result: {},
-    tasks: initialTasks.map(t => ({ ...t })),
-    setPrompt: (p) => set((state) => { (state as VideoSlice).activePrompt = p; }),
-    setResultPart: (partial) => set((state) => { (state as VideoSlice).result = { ...(state as VideoSlice).result, ...partial }; }),
-    setTasks: (tasks) => set((state) => { (state as VideoSlice).tasks = tasks; }),
-    updateTask: (id, patch) => set((state) => { (state as VideoSlice).tasks = (state as VideoSlice).tasks.map(t => (t.id === id ? { ...t, ...patch } : t)); }),
-    resetTasks: () => set((state) => { (state as VideoSlice).tasks = initialTasks.map(t => ({ ...t })); }),
+    setResult: (result) => set({ result }),
+    setResultPart: (partialResult) => set((state) => ({
+        result: { ...state.result, ...partialResult }
+    })),
+    clearResult: () => set({ result: {} })
 });

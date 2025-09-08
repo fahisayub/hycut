@@ -28,7 +28,7 @@ async function generateImageWithRetries(prompt: string, maxRetries = 2, referenc
                 prompt = `${prompt}\nEnsure likeness stays consistent with prior portrait of the character (same hair color, clothing style).`;
             }
             const response = await openai.images.generate({
-                model: 'dall-e-3',
+                model: 'gpt-image-1',
                 prompt,
                 n: 1,
                 size: '1024x1024',

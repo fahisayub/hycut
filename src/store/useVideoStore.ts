@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { persist } from 'zustand/middleware';
-import { makePromptKey, saveToStorage, loadFromStorage } from '@/lib/storage';
+import { makePromptKey, saveToStorage, loadFromStorage } from '@/utils/storage';
 
 export type GenerationResult = {
     story?: string;
@@ -94,7 +94,7 @@ const createTasksSlice = (): TasksSlice => ({
 export const useVideoStore = create<VideoStore>()(
     devtools(
         persist(
-            immer((set, get) => ({
+            immer((set) => ({
                 ...createPipelineSlice(),
                 ...createTasksSlice(),
                 // Override methods to use set/get safely

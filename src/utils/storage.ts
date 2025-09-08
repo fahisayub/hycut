@@ -35,3 +35,5 @@ export function clearStorage(key: string) {
     if (typeof window === 'undefined') return;
     localStorage.removeItem(key);
 }
+
+
