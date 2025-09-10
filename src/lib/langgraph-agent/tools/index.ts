@@ -1,7 +1,9 @@
 import { contentAnalyzerTool } from "./content-analyzer-tool";
 import { characterImageTool, sceneImageTool } from "./image-generation-tool";
 import { voiceGenerationTool, videoGenerationTool, videoAssemblyTool } from "./voice-generation-tool";
+import { voiceImageVideoCombinerTool, multiVoiceImageVideoCombinerTool } from "./video-combiner-tool";
 import { storyGeneratorTool } from "./story-generator-tool";
+import { storyRefinerTool } from "./story-refiner-tool";
 import { scriptWriterTool } from "./script-writer-tool";
 import { characterDesignerTool } from "./character-designer-tool";
 import { sceneGeneratorTool } from "./scene-generator-tool";
@@ -13,7 +15,10 @@ export {
     voiceGenerationTool,
     videoGenerationTool,
     videoAssemblyTool,
+    voiceImageVideoCombinerTool,
+    multiVoiceImageVideoCombinerTool,
     storyGeneratorTool,
+    storyRefinerTool,
     scriptWriterTool,
     characterDesignerTool,
     sceneGeneratorTool,
@@ -22,6 +27,7 @@ export {
 export const ALL_TOOLS = {
     contentAnalyzer: contentAnalyzerTool,
     storyGenerator: storyGeneratorTool,
+    storyRefiner: storyRefinerTool,
     scriptWriter: scriptWriterTool,
     characterDesigner: characterDesignerTool,
     sceneGenerator: sceneGeneratorTool,
@@ -30,13 +36,15 @@ export const ALL_TOOLS = {
     voiceGeneration: voiceGenerationTool,
     videoGeneration: videoGenerationTool,
     videoAssembly: videoAssemblyTool,
+    voiceImageVideoCombiner: voiceImageVideoCombinerTool,
+    multiVoiceImageVideoCombiner: multiVoiceImageVideoCombinerTool,
 } as const;
 
 export const TOOL_CATEGORIES = {
-    CONTENT: ['contentAnalyzer', 'storyGenerator', 'scriptWriter'],
+    CONTENT: ['contentAnalyzer', 'storyGenerator', 'storyRefiner', 'scriptWriter'],
     CHARACTER: ['characterDesigner', 'characterImage'],
     SCENE: ['sceneGenerator', 'sceneImage'],
-    MEDIA: ['voiceGeneration', 'videoGeneration', 'videoAssembly'],
+    MEDIA: ['voiceGeneration', 'videoGeneration', 'videoAssembly', 'voiceImageVideoCombiner', 'multiVoiceImageVideoCombiner'],
 } as const;
 
 export type ToolName = keyof typeof ALL_TOOLS;

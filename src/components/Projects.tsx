@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,6 +55,7 @@ const DashboardContent = () => {
     const streamingState = useStreamingGeneration() as ReturnType<typeof useStreamingGeneration>;
 
     const [activeTask, setActiveTask] = useState<string>('');
+    const [activeStep, setActiveStep] = useState<string>('');
     const [contentType, setContentType] = useState<string>('');
     const [dynamicPlan, setDynamicPlan] = useState<PlanStep[]>([]);
     const [hasStarted, setHasStarted] = useState(false);
@@ -122,9 +123,87 @@ const DashboardContent = () => {
             // Set active task to current streaming step
             if (streamingState.currentStep) {
                 setActiveTask(streamingState.currentStep);
+                setActiveStep(streamingState.currentStep);
             }
         }
     }, [streamingState.updates, streamingState.currentStep, streamingState.completedSteps, streamingState.progress, dynamicPlan, setTasks]);
+
+    // Build sidebar strictly from streamed steps (first occurrence order)
+    const sidebarSteps = useMemo(() => {
+        const seen = new Set<string>();
+        const order: string[] = [];
+        for (const u of streamingState.updates) {
+            if (u.step && !seen.has(u.step)) {
+                seen.add(u.step);
+                order.push(u.step);
+            }
+        }
+        return order;
+    }, [streamingState.updates]);
+
+    // Simple step display name
+    const getStepName = (id: string) => {
+        const map: Record<string, string> = {
+            content_analysis: 'Content Analysis',
+            story_generation: 'Story Generation',
+            story_refine: 'Storytelling Refinement',
+            script_writing: 'Script Writing',
+            character_design: 'Character Design',
+            character_image_generation: 'Character Images',
+            scene_generation: 'Scene Planning',
+            scene_image_generation: 'Scene Images',
+            voice_generation: 'Voice Generation',
+            video_generation: 'Video Generation',
+            video_assembly: 'Final Assembly',
+            compose_output: 'Compose Output',
+        };
+        return map[id] || id;
+    };
+
+    // Render content for active streamed step
+    const renderStreamedContent = (stepId: string) => {
+        const r = (streamingState.result as Record<string, unknown>) || {};
+        switch (stepId) {
+            case 'story_generation':
+                return typeof r.story === 'string' ? (
+                    <div className="p-4 bg-card rounded-lg border whitespace-pre-wrap text-sm leading-relaxed">{r.story as string}</div>
+                ) : null;
+            case 'story_refine':
+            case 'script_writing':
+                return typeof r.script === 'string' ? (
+                    <div className="p-4 bg-card rounded-lg border whitespace-pre-wrap text-sm leading-relaxed font-mono">{r.script as string}</div>
+                ) : null;
+            case 'voice_generation':
+                return Array.isArray(r.voices) ? (
+                    <div className="space-y-3">
+                        {(r.voices as { character: string; audioDataUrl: string }[]).map((v, i) => (
+                            <div key={i} className="flex items-center gap-3">
+                                <div className="text-xs w-24 truncate">{v.character}</div>
+                                <audio controls src={v.audioDataUrl} className="flex-1" />
+                            </div>
+                        ))}
+                    </div>
+                ) : null;
+            case 'character_image_generation':
+                return r.characterImages && typeof r.characterImages === 'object' ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {Object.entries(r.characterImages as Record<string, string>).map(([name, url]) => (
+                            <div key={name} className="rounded-lg overflow-hidden bg-muted">
+                                <img src={url} alt={name} className="w-full h-auto" />
+                                <div className="text-xs p-2 text-center">{name}</div>
+                            </div>
+                        ))}
+                    </div>
+                ) : null;
+            case 'compose_output':
+            case 'video_assembly':
+                return r.finalVideo ? (
+                    <video controls className="w-full rounded-lg" src={r.finalVideo as string} />
+                ) : null;
+            default:
+                return null;
+        }
+    };
 
     const startStreamingGeneration = async () => {
         if (!userPrompt || hasStarted) return;
@@ -132,7 +211,7 @@ const DashboardContent = () => {
         setHasStarted(true);
 
         // Start the real-time streaming generation
-        await streamingState.startGeneration(userPrompt, preset);
+        await streamingState.startGeneration(userPrompt, preset, 'SIMPLE_STORY');
     };
 
     const getStatusIcon = (status: string) => {
@@ -432,81 +511,38 @@ const DashboardContent = () => {
                             </div>
                         )}
 
-                        {/* 🧠 NEW: Real-time Thinking State Display */}
-                        {streamingState.thinking && (
-                            <div className="mb-4 p-4 border rounded-lg bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
-                                <div className="flex items-start gap-3">
-                                    <Eye className="w-5 h-5 text-blue-500 mt-0.5 animate-pulse" />
-                                    <div className="flex-1">
-                                        <h4 className="text-sm font-medium text-blue-700 mb-1">AI Thinking</h4>
-                                        <p className="text-sm text-blue-600 leading-relaxed">
-                                            {streamingState.thinking}
-                                        </p>
-                                    </div>
-                                </div>
+
+
+
+
+
+
+                        {sidebarSteps.length > 0 ? (
+                            <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                                {sidebarSteps.map((stepId, index) => {
+                                    const Icon = getIconForStep(stepId);
+                                    const isActive = activeStep === stepId;
+                                    const completed = streamingState.completedSteps.includes(stepId);
+                                    return (
+                                        <button
+                                            key={stepId}
+                                            onClick={() => setActiveStep(stepId)}
+                                            className={`w-full text-left p-3 rounded-lg border transition ${isActive ? 'border-primary bg-primary/10' : 'border-border bg-card/50 hover:bg-card/70 hover:border-primary/50'}`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="text-xs font-medium w-6 h-6 rounded-full bg-muted flex items-center justify-center">{index}</div>
+                                                <div className={`p-2 rounded ${completed ? 'bg-green-500/20' : isActive ? 'bg-primary/20' : 'bg-muted/50'}`}>
+                                                    <Icon className={`w-4 h-4 ${completed ? 'text-green-400' : isActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="font-medium text-sm truncate">{getStepName(stepId)}</div>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
                             </div>
-                        )}
-
-                        {/* 📊 Real-time Progress Display */}
-                        {streamingState.isStreaming ? (
-                            <div className="mb-4 p-4 bg-card/50 rounded-lg border">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-sm font-medium flex items-center gap-2">
-                                        <Zap className="w-4 h-4 text-primary animate-pulse" />
-                                        Live Progress
-                                    </span>
-                                    <span className="text-sm text-muted-foreground">
-                                        {streamingState.progress}%
-                                    </span>
-                                </div>
-                                <Progress value={streamingState.progress || 0} className="h-2" />
-                                <div className="mt-2 text-xs text-muted-foreground">
-                                    Current: {streamingState.currentStep?.replace('_', ' ') || 'Processing...'}
-                                </div>
-                            </div>
-                        ) : null}
-
-                        {/* Global Content Display - Shows all generated content */}
-                        {streamingState.result && Object.keys(streamingState.result as Record<string, unknown>).length > 0 && (
-                            <div className="mb-4 space-y-3">
-                                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                                    <h5 className="font-medium mb-2 text-green-800">🎉 Generated Content</h5>
-                                    <div className="text-xs text-green-700 space-y-1">
-                                        {(streamingState.result as Record<string, unknown>).story && typeof (streamingState.result as Record<string, unknown>).story === 'string' ? (
-                                            <div>✅ Story: <strong>{((streamingState.result as Record<string, unknown>).story as string).length} chars</strong></div>
-                                        ) : null}
-                                        {(streamingState.result as Record<string, unknown>).script && typeof (streamingState.result as Record<string, unknown>).script === 'string' ? (
-                                            <div>✅ Script: <strong>{((streamingState.result as Record<string, unknown>).script as string).length} chars</strong></div>
-                                        ) : null}
-                                        {(streamingState.result as Record<string, unknown>).characters ? (
-                                            <div>✅ Characters: <strong>{Array.isArray((streamingState.result as Record<string, unknown>).characters) ? (streamingState.result as Record<string, unknown>).characters.length : 1} items</strong></div>
-                                        ) : null}
-                                    </div>
-                                </div>
-
-                                {/* Show Story Content */}
-                                {(streamingState.result as Record<string, unknown>).story && typeof (streamingState.result as Record<string, unknown>).story === 'string' && (
-                                    <div className="p-4 bg-card rounded-lg border">
-                                        <h5 className="font-medium mb-2 text-primary">📖 Generated Story</h5>
-                                        <div className="text-xs whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
-                                            {(streamingState.result as Record<string, unknown>).story as string}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Show Script Content */}
-                                {(streamingState.result as Record<string, unknown>).script && typeof (streamingState.result as Record<string, unknown>).script === 'string' && (
-                                    <div className="p-4 bg-card rounded-lg border">
-                                        <h5 className="font-medium mb-2 text-primary">📝 Generated Script</h5>
-                                        <div className="text-xs whitespace-pre-wrap leading-relaxed font-mono max-h-32 overflow-y-auto">
-                                            {(streamingState.result as Record<string, unknown>).script as string}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {tasks.length > 0 && (
+                        ) : tasks.length > 0 && (
                             <div className="flex-1 overflow-y-auto space-y-3 pr-2">
                                 {tasks.map((task, index) => {
                                     const IconComponent = task.icon || Sparkles;
@@ -606,7 +642,25 @@ const DashboardContent = () => {
 
                 <div className="flex-1 overflow-hidden">
                     <div className="h-full overflow-y-auto p-6">
-                        {activeTaskData ? (
+                        {sidebarSteps.length > 0 ? (
+                            <Card className="border-border bg-card/50 backdrop-blur-sm">
+                                <CardHeader>
+                                    <div className="flex items-center gap-3">
+                                        {activeStep ? (
+                                            <>
+                                                {React.createElement(getIconForStep(activeStep), { className: 'w-6 h-6 text-primary' })}
+                                                <CardTitle className="text-2xl">{getStepName(activeStep)}</CardTitle>
+                                            </>
+                                        ) : (
+                                            <CardTitle className="text-2xl">Waiting to start…</CardTitle>
+                                        )}
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    {activeStep ? renderStreamedContent(activeStep) : null}
+                                </CardContent>
+                            </Card>
+                        ) : activeTaskData ? (
                             <Card className="border-border bg-card/50 backdrop-blur-sm">
                                 <CardHeader>
                                     <div className="flex items-center justify-between">

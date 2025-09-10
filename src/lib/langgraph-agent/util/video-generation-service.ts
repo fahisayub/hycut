@@ -161,3 +161,112 @@ The character should match the reference image (appearance and clothing) consist
 Avoid text overlays, logos, gore, violence, or sensitive content.`;
     return generateVideo({ prompt, characterImageUrl, sceneDescription, duration, style: 'Character-consistent, cinematic, high-quality' });
 }
+
+/**
+ * Interface for voice-image video combination
+ */
+export interface VoiceImageVideoRequest {
+    voiceData: {
+        character: string;
+        text: string;
+        voice: string;
+        audioDataUrl: string;
+    };
+    imageUrls: string | string[];
+    outputFileName?: string;
+    imageDuration?: number;
+    createSlideshow?: boolean;
+}
+
+/**
+ * Interface for multi-voice-image video combination
+ */
+export interface MultiVoiceImageVideoRequest {
+    voiceSegments: Array<{
+        character: string;
+        text: string;
+        voice: string;
+        audioDataUrl: string;
+    }>;
+    imageUrls: string[];
+    outputFileName?: string;
+    transitionDuration?: number;
+}
+
+/**
+ * Combines voice audio with images to create a video using FFmpeg
+ * This function provides a direct interface to the video combiner functionality
+ */
+export async function combineVoiceAndImageVideo(request: VoiceImageVideoRequest): Promise<{
+    success: boolean;
+    videoUrl?: string;
+    duration?: number;
+    fileName?: string;
+    error?: string;
+}> {
+    try {
+        // Import the video combiner tool dynamically to avoid circular dependencies
+        const { voiceImageVideoCombinerTool } = await import('../tools/video-combiner-tool');
+
+        // Execute the tool with the provided parameters
+        const result = await voiceImageVideoCombinerTool.invoke({
+            voiceData: request.voiceData,
+            imageUrls: request.imageUrls,
+            outputFileName: request.outputFileName,
+            imageDuration: request.imageDuration,
+            createSlideshow: request.createSlideshow
+        });
+
+        return result as {
+            success: boolean;
+            videoUrl?: string;
+            duration?: number;
+            fileName?: string;
+            error?: string;
+        };
+    } catch (error) {
+        console.error('Error in combineVoiceAndImageVideo:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error occurred'
+        };
+    }
+}
+
+/**
+ * Combines multiple voice segments with corresponding images to create a single video
+ */
+export async function combineMultiVoiceImageVideo(request: MultiVoiceImageVideoRequest): Promise<{
+    success: boolean;
+    videoUrl?: string;
+    fileName?: string;
+    segmentCount?: number;
+    error?: string;
+}> {
+    try {
+        // Import the multi-voice video combiner tool dynamically
+        const { multiVoiceImageVideoCombinerTool } = await import('../tools/video-combiner-tool');
+
+        // Execute the tool with the provided parameters
+        const result = await multiVoiceImageVideoCombinerTool.invoke({
+            voiceSegments: request.voiceSegments,
+            imageUrls: request.imageUrls,
+            outputFileName: request.outputFileName,
+            transitionDuration: request.transitionDuration
+        });
+
+        return result as {
+            success: boolean;
+            videoUrl?: string;
+            fileName?: string;
+            segmentCount?: number;
+            error?: string;
+        };
+    } catch (error) {
+        console.error('Error in combineMultiVoiceImageVideo:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error occurred'
+        };
+    }
+}

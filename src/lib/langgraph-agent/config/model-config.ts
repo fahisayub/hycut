@@ -11,6 +11,11 @@ export const MODEL_CONFIGS = {
         model: 'gpt-4o-mini',
         apiKey: process.env.OPENAI_API_KEY,
     },
+    story_editing: {
+        provider: 'anthropic' as const,
+        model: 'claude-3-5-sonnet-20240620',
+        apiKey: process.env.ANTHROPIC_API_KEY,
+    },
     script_writing: {
         provider: 'openai' as const,
         model: 'gpt-4o-mini',
@@ -23,7 +28,7 @@ export const MODEL_CONFIGS = {
     },
     character_image_generation: {
         provider: 'openai' as const,
-        model: 'gpt-image-1',
+        model: 'dall-e-2',
         apiKey: process.env.OPENAI_API_KEY,
     },
     location_design: {
@@ -50,7 +55,7 @@ export const MODEL_CONFIGS = {
         provider: 'openai' as const,
         model: 'gpt-4o-mini',
         apiKey: process.env.OPENAI_API_KEY,
-    }
+    },
 };
 
 // Easy model switching function

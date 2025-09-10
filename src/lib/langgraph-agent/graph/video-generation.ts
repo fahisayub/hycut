@@ -1,16 +1,19 @@
 import { StateGraph, END, START } from "@langchain/langgraph";
 import { VideoGenerationStateAnnotation, type LangGraphVideoState } from "../state/langgraph-state";
+import type { CharacterDesign } from "@/types/video-generation-state";
 import {
     contentAnalyzerTool,
     storyGeneratorTool,
+    storyRefinerTool,
     scriptWriterTool,
     characterDesignerTool,
     sceneGeneratorTool,
     characterImageTool,
     sceneImageTool,
     voiceGenerationTool,
-    videoGenerationTool,
     videoAssemblyTool,
+    voiceImageVideoCombinerTool,
+    multiVoiceImageVideoCombinerTool,
 } from "../tools";
 
 /**
@@ -227,13 +230,63 @@ async function mediaGenerationNode(state: LangGraphVideoState): Promise<Partial<
 }
 
 async function videoGenerationNode(state: LangGraphVideoState): Promise<Partial<LangGraphVideoState>> {
-    console.log('🎥 LangGraph Node: Video Generation');
+    console.log('🎥 LangGraph Node: Video Generation (Voice + Image Combiner)');
 
     try {
-        const generatedVideos = await videoGenerationTool.invoke({
-            scenes: state.scenes,
-            characterImages: state.characterImages
-        });
+        const generatedVideos: string[] = [];
+
+        // Check if we have voices and images to combine
+        if (state.voices && state.voices.length > 0 && state.sceneImages && state.sceneImages.length > 0) {
+            console.log(`🎬 Combining ${state.voices.length} voice segments with ${state.sceneImages.length} images`);
+
+            // Use multi-voice combiner if we have multiple voices
+            if (state.voices.length > 1) {
+                const result = await multiVoiceImageVideoCombinerTool.invoke({
+                    voiceSegments: state.voices,
+                    imageUrls: state.sceneImages.slice(0, state.voices.length), // Match voice count
+                    outputFileName: `combined_video_${Date.now()}.mp4`,
+                    transitionDuration: 0.5
+                });
+
+                if (result.success && result.videoUrl) {
+                    generatedVideos.push(result.videoUrl);
+                    console.log(`✅ Multi-voice video created: ${result.videoUrl}`);
+                }
+            } else {
+                // Use single voice combiner for one voice segment
+                const result = await voiceImageVideoCombinerTool.invoke({
+                    voiceData: state.voices[0],
+                    imageUrls: state.sceneImages,
+                    outputFileName: `single_voice_video_${Date.now()}.mp4`,
+                    createSlideshow: state.sceneImages.length > 1,
+                    imageDuration: 3
+                });
+
+                if (result.success && result.videoUrl) {
+                    generatedVideos.push(result.videoUrl);
+                    console.log(`✅ Single voice video created: ${result.videoUrl}`);
+                }
+            }
+        } else if (state.voices && state.voices.length > 0 && state.characterImages && Object.keys(state.characterImages).length > 0) {
+            // Fallback: use character images if no scene images
+            console.log('🎭 Using character images as fallback for video generation');
+
+            const characterImageUrls = Object.values(state.characterImages);
+            const result = await voiceImageVideoCombinerTool.invoke({
+                voiceData: state.voices[0],
+                imageUrls: characterImageUrls,
+                outputFileName: `character_video_${Date.now()}.mp4`,
+                createSlideshow: characterImageUrls.length > 1,
+                imageDuration: 3
+            });
+
+            if (result.success && result.videoUrl) {
+                generatedVideos.push(result.videoUrl);
+                console.log(`✅ Character video created: ${result.videoUrl}`);
+            }
+        } else {
+            console.warn('⚠️  No voices or images available for video generation');
+        }
 
         return {
             generatedVideos: [...state.generatedVideos, ...generatedVideos],
@@ -259,6 +312,24 @@ async function videoAssemblyNode(state: LangGraphVideoState): Promise<Partial<La
     console.log('🎞️ LangGraph Node: Final Assembly');
 
     try {
+        // If we have generated videos from the combiner, use the first one as final
+        if (state.generatedVideos && state.generatedVideos.length > 0) {
+            const finalVideo = state.generatedVideos[0];
+            console.log(`✅ Final video ready: ${finalVideo}`);
+
+            return {
+                finalVideo,
+                completedSteps: [...state.completedSteps, 'video_assembly'],
+                currentStep: 'completed',
+                progress: {
+                    currentStepProgress: 100,
+                    overallProgress: 100,
+                    estimatedTimeRemaining: 0
+                }
+            };
+        }
+
+        // Fallback to original assembly tool if no videos were generated
         const finalVideo = await videoAssemblyTool.invoke({
             generatedVideos: state.generatedVideos,
             sceneImages: state.sceneImages,
@@ -279,7 +350,7 @@ async function videoAssemblyNode(state: LangGraphVideoState): Promise<Partial<La
     } catch (error) {
         console.error('❌ Video Assembly Node Error:', error);
         return {
-            finalVideo: state.script || 'Video generation completed with errors',
+            finalVideo: state.generatedVideos?.[0] || state.script || 'Video generation completed with errors',
             errors: [
                 ...state.errors,
                 {
@@ -411,6 +482,128 @@ export async function processVideoGenerationWithLangGraph(userInput: string): Pr
         console.error('❌ LangGraph Video Generation Failed:', error);
         throw error;
     }
+}
+
+// ============================================================================
+// SIMPLE STORY PIPELINE (story -> refine -> audio -> character -> compose)
+// ============================================================================
+
+async function simpleStoryNode(state: LangGraphVideoState): Promise<Partial<LangGraphVideoState>> {
+    const story = await storyGeneratorTool.invoke({
+        userInput: state.userInput,
+        contentType: 'storytelling',
+    });
+    return {
+        story: String(story),
+        completedSteps: [...state.completedSteps, 'story_generation'],
+        currentStep: 'story_refine',
+    };
+}
+
+async function simpleRefineNode(state: LangGraphVideoState): Promise<Partial<LangGraphVideoState>> {
+    const refined = await storyRefinerTool.invoke({ story: state.story || '' });
+    return {
+        script: String(refined),
+        completedSteps: [...state.completedSteps, 'story_refine'],
+        currentStep: 'voice_generation',
+    };
+}
+
+async function simpleVoiceNode(state: LangGraphVideoState): Promise<Partial<LangGraphVideoState>> {
+    const voices = await voiceGenerationTool.invoke({ script: state.script || '' });
+    return {
+        voices: Array.isArray(voices) ? voices : [],
+        completedSteps: [...state.completedSteps, 'voice_generation'],
+        currentStep: 'character_image_generation',
+    };
+}
+
+async function simpleCharacterImageNode(state: LangGraphVideoState): Promise<Partial<LangGraphVideoState>> {
+    const narrator: CharacterDesign = {
+        name: 'Narrator',
+        role: 'Storyteller',
+        description: 'A friendly, trustworthy narrator speaking directly to camera',
+        appearance: 'Warm lighting, clear facial features, approachable style',
+    };
+    const images = await characterImageTool.invoke({ characters: [narrator] });
+    return {
+        characters: [narrator],
+        characterImages: images || {},
+        completedSteps: [...state.completedSteps, 'character_image_generation'],
+        currentStep: 'compose_output',
+    };
+}
+
+async function simpleComposeNode(state: LangGraphVideoState): Promise<Partial<LangGraphVideoState>> {
+    console.log('🎬 Simple Compose Node: Creating video from voice and character image');
+
+    try {
+        // Use the video combiner to create a video from voice and character image
+        if (state.voices && state.voices.length > 0 && state.characterImages && Object.keys(state.characterImages).length > 0) {
+            const characterImageUrls = Object.values(state.characterImages);
+            const result = await voiceImageVideoCombinerTool.invoke({
+                voiceData: state.voices[0],
+                imageUrls: characterImageUrls[0], // Use first character image
+                outputFileName: `story_video_${Date.now()}.mp4`,
+                createSlideshow: false
+            });
+
+            if (result.success && result.videoUrl) {
+                console.log(`✅ Story video created: ${result.videoUrl}`);
+                return {
+                    finalVideo: result.videoUrl,
+                    completedSteps: [...state.completedSteps, 'compose_output'],
+                    currentStep: 'completed',
+                };
+            }
+        }
+
+        // Fallback to original assembly
+        const assembled = await videoAssemblyTool.invoke({
+            generatedVideos: state.generatedVideos,
+            sceneImages: state.sceneImages,
+            script: state.script || undefined,
+            finalVideo: state.finalVideo || undefined,
+        });
+
+        return {
+            finalVideo: typeof assembled === 'string' ? assembled : state.finalVideo || null,
+            completedSteps: [...state.completedSteps, 'compose_output'],
+            currentStep: 'completed',
+        };
+    } catch (error) {
+        console.error('❌ Simple Compose Node Error:', error);
+        return {
+            finalVideo: state.script || 'Video generation completed with errors',
+            completedSteps: [...state.completedSteps, 'compose_output'],
+            currentStep: 'completed',
+            errors: [
+                ...state.errors,
+                {
+                    step: 'compose_output',
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    timestamp: new Date()
+                }
+            ]
+        };
+    }
+}
+
+export function createSimpleStoryGraph() {
+    const workflow = new StateGraph(VideoGenerationStateAnnotation)
+        .addNode('story_generation', simpleStoryNode)
+        .addNode('story_refine', simpleRefineNode)
+        .addNode('voice_generation', simpleVoiceNode)
+        .addNode('character_image_generation', simpleCharacterImageNode)
+        .addNode('compose_output', simpleComposeNode)
+        .addEdge(START, 'story_generation')
+        .addEdge('story_generation', 'story_refine')
+        .addEdge('story_refine', 'voice_generation')
+        .addEdge('voice_generation', 'character_image_generation')
+        .addEdge('character_image_generation', 'compose_output')
+        .addEdge('compose_output', END);
+
+    return workflow.compile();
 }
 
 

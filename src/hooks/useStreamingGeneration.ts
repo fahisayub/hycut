@@ -42,7 +42,7 @@ export function useStreamingGeneration() {
         thinking: null
     });
 
-    const startGeneration = useCallback(async (userInput: string, preset = 'BALANCED') => {
+    const startGeneration = useCallback(async (userInput: string, preset = 'BALANCED', mode?: 'SIMPLE_STORY' | 'FULL') => {
         // Reset state
         setState({
             isStreaming: true,
@@ -61,7 +61,7 @@ export function useStreamingGeneration() {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ userInput, preset }),
+                body: JSON.stringify({ userInput, preset, mode }),
             });
 
             if (!response.ok) {

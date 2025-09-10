@@ -10,8 +10,8 @@ export interface VoiceLine {
 }
 
 function pickVoiceForCharacter(name: string): string {
-    // Simple deterministic mapping; can be extended
-    const voices = ['alloy', 'verse', 'aria', 'sage'];
+    // Supported voices for gpt-4o-mini-tts per spec
+    const voices = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer'];
     const idx = Math.abs(Array.from(name).reduce((a, c) => a + c.charCodeAt(0), 0)) % voices.length;
     return voices[idx];
 }
@@ -33,7 +33,12 @@ function parseDialogLines(script: string): Array<{ character: string; text: stri
 }
 
 export async function generateVoicesFromScript(script: string, maxLines: number = 8): Promise<VoiceLine[]> {
-    const dialogs = parseDialogLines(script).slice(0, maxLines);
+    let dialogs = parseDialogLines(script).slice(0, Math.max(1, maxLines));
+    // Fallback: if no dialog lines detected, synthesize a single narration line
+    if (dialogs.length === 0) {
+        dialogs = [{ character: 'Narrator', text: script.slice(0, 1000) }];
+    }
+
     const out: VoiceLine[] = [];
     for (const d of dialogs) {
         const voice = pickVoiceForCharacter(d.character);
@@ -45,7 +50,7 @@ export async function generateVoicesFromScript(script: string, maxLines: number 
             });
             const arrayBuffer = await speech.arrayBuffer();
             const base64 = Buffer.from(arrayBuffer).toString('base64');
-            out.push({ character: d.character, text: d.text, voice, audioDataUrl: `data:audio/mpeg;base64,${base64}` });
+           out.push({ character: d.character, text: d.text, voice, audioDataUrl: `data:audio/mpeg;base64,${base64}` });
         } catch {
             // continue on failure for this line
         }

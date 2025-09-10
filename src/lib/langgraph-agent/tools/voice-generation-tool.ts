@@ -1,6 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { generateVoicesFromScript } from "@/lib/util/voice-generation";
+import { generateVoicesFromScript } from "@/lib/langgraph-agent/util/voice-generation";
 import { VoiceData } from "@/types/video-generation-state";
 
 export const voiceGenerationTool = tool(
@@ -12,6 +12,7 @@ export const voiceGenerationTool = tool(
         try {
             const voices: VoiceData[] = await generateVoicesFromScript(script, maxLines);
             console.log(`✅ Generated ${voices.length} voice lines from script`);
+            console.log(voices)
             return voices;
         } catch (error) {
             console.error('Error generating voices:', error);
@@ -42,7 +43,7 @@ export const videoGenerationTool = tool(
             return generatedVideos;
         }
         try {
-            const { generateCharacterConsistentVideo } = await import('@/lib/util/video-generation-service');
+            const { generateCharacterConsistentVideo } = await import('@/lib/langgraph-agent/util/video-generation-service');
             const firstCharacterUrl = characterImages ? Object.values(characterImages)[0] : '';
             const scenesToProcess = scenes.slice(0, 3);
             for (const scene of scenesToProcess) {

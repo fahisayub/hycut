@@ -1,6 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { getModelForTask } from "@/config/model-switcher";
+import { getModelForTask } from "@/lib/langgraph-agent/config/model-switcher";
 import { ContentType } from "@/types/video-generation-state";
 
 export const storyGeneratorTool = tool(
@@ -15,6 +15,7 @@ export const storyGeneratorTool = tool(
 
         try {
             const response = await model.invoke(storyPrompt);
+            console.log('story response', response);
             return response.content as string;
         } catch (error) {
             console.error('Error generating story:', error);

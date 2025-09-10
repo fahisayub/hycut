@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createVideoGenerationGraph } from '@/graph/video-generation';
-import { convertFromLangGraphState, LangGraphVideoState } from '@/state/langgraph-state';
+import { createVideoGenerationGraph, createSimpleStoryGraph } from '@/lib/langgraph-agent/graph/video-generation';
+import { convertFromLangGraphState, LangGraphVideoState } from '@/lib/langgraph-agent/state/langgraph-state';
 
 /**
  * 🔄 REAL-TIME STREAMING API FOR LANGGRAPH VIDEO GENERATION
@@ -10,7 +10,7 @@ import { convertFromLangGraphState, LangGraphVideoState } from '@/state/langgrap
  */
 
 export async function POST(request: NextRequest) {
-    const { userInput, preset = 'BALANCED' } = await request.json();
+    const { userInput, preset = 'BALANCED', mode } = await request.json();
 
     if (!userInput || typeof userInput !== 'string') {
         return NextResponse.json({
@@ -47,14 +47,14 @@ export async function POST(request: NextRequest) {
                 });
 
                 // Create and configure the graph for streaming
-                const graph = createVideoGenerationGraph();
+                const graph = mode === 'SIMPLE_STORY' ? createSimpleStoryGraph() : createVideoGenerationGraph();
 
                 // Initial state
                 const initialState = {
                     userInput,
                     contentType: 'unknown' as const,
                     completedSteps: [],
-                    currentStep: 'content_analysis',
+                    currentStep: mode === 'SIMPLE_STORY' ? 'story_generation' : 'content_analysis',
                     startTime: new Date(),
                     errors: [],
                     progress: {
@@ -63,35 +63,60 @@ export async function POST(request: NextRequest) {
                     }
                 };
 
-                // Send planning start
-                sendUpdate({
-                    type: 'step_start',
-                    step: 'content_analysis',
-                    message: '🎯 Analyzing your request and creating custom workflow...',
-                    timestamp: new Date().toISOString(),
-                    thinking: `Examining "${userInput}" to determine content type, complexity, and required workflow steps`,
-                    progress: 5
-                });
+                // Send initial step start
+                if (mode === 'SIMPLE_STORY') {
+                    sendUpdate({
+                        type: 'step_start',
+                        step: 'story_generation',
+                        message: '📖 Generating story from your prompt...',
+                        timestamp: new Date().toISOString(),
+                        thinking: `Creating a compelling story for: "${userInput}"`,
+                        progress: 5
+                    });
+                } else {
+                    sendUpdate({
+                        type: 'step_start',
+                        step: 'content_analysis',
+                        message: '🎯 Analyzing your request and creating custom workflow...',
+                        timestamp: new Date().toISOString(),
+                        thinking: `Examining "${userInput}" to determine content type, complexity, and required workflow steps`,
+                        progress: 5
+                    });
+                }
 
                 // Use LangGraph streaming to get real-time updates
                 let stepCounter = 0;
-                const totalEstimatedSteps = 8; // Estimate based on typical workflow
+                const totalEstimatedSteps = mode === 'SIMPLE_STORY' ? 5 : 8; // Estimate based on workflow
                 let finalResult: unknown = null;
+                let currentState: Record<string, unknown> = initialState;
 
                 for await (const update of await graph.stream(initialState)) {
                     stepCounter++;
                     const progressPercent = Math.round((stepCounter / totalEstimatedSteps) * 100);
 
-                    // Type the update object properly
-                    const typedUpdate = update as Record<string, unknown>;
+                    // LangGraph stream returns { [nodeName]: state } format
+                    const nodeName = Object.keys(update)[0];
+                    const nodeState = (update as Record<string, unknown>)[nodeName] as Record<string, unknown>;
+
+                    console.log(`🔄 LangGraph Update - Node: ${nodeName}, State:`, {
+                        currentStep: nodeState.currentStep,
+                        completedSteps: nodeState.completedSteps,
+                        hasStory: !!nodeState.story,
+                        hasScript: !!nodeState.script,
+                        hasVoices: !!nodeState.voices,
+                        hasCharacterImages: !!nodeState.characterImages
+                    });
+
+                    // Update our current state with the new state
+                    currentState = { ...currentState, ...nodeState };
 
                     // Get the current step from the state
-                    const currentStep = typedUpdate.currentStep as string || 'unknown';
-                    const completedSteps = typedUpdate.completedSteps as string[] || [];
+                    const currentStep = currentState.currentStep as string || 'unknown';
+                    const completedSteps = currentState.completedSteps as string[] || [];
                     const lastCompletedStep = completedSteps[completedSteps.length - 1];
 
                     // 🔄 TOKEN-BY-TOKEN: Send partial content updates for real-time display
-                    if (typedUpdate.story && typeof typedUpdate.story === 'string') {
+                    if (currentState.story && typeof currentState.story === 'string') {
                         sendUpdate({
                             type: 'content_update',
                             step: 'story_generation',
@@ -99,23 +124,23 @@ export async function POST(request: NextRequest) {
                             timestamp: new Date().toISOString(),
                             thinking: 'Creating compelling narrative with engaging characters and plot development',
                             progress: progressPercent,
-                            data: { story: typedUpdate.story }
+                            data: { story: currentState.story }
                         });
                     }
 
-                    if (typedUpdate.script && typeof typedUpdate.script === 'string') {
+                    if (currentState.script && typeof currentState.script === 'string') {
                         sendUpdate({
                             type: 'content_update',
-                            step: 'script_writing',
+                            step: currentStep === 'story_refine' ? 'story_refine' : 'script_writing',
                             message: '📝 Script being written...',
                             timestamp: new Date().toISOString(),
                             thinking: 'Converting story into professional screenplay format',
                             progress: progressPercent,
-                            data: { script: typedUpdate.script }
+                            data: { script: currentState.script }
                         });
                     }
 
-                    if (typedUpdate.characters && Array.isArray(typedUpdate.characters)) {
+                    if (currentState.characters && Array.isArray(currentState.characters)) {
                         sendUpdate({
                             type: 'content_update',
                             step: 'character_design',
@@ -123,14 +148,50 @@ export async function POST(request: NextRequest) {
                             timestamp: new Date().toISOString(),
                             thinking: 'Developing detailed character profiles and personalities',
                             progress: progressPercent,
-                            data: { characters: typedUpdate.characters }
+                            data: { characters: currentState.characters }
+                        });
+                    }
+
+                    if (currentState.voices && Array.isArray(currentState.voices)) {
+                        sendUpdate({
+                            type: 'content_update',
+                            step: 'voice_generation',
+                            message: '🎵 Voices being generated...',
+                            timestamp: new Date().toISOString(),
+                            thinking: 'Synthesizing narration/audio lines',
+                            progress: progressPercent,
+                            data: { voices: currentState.voices }
+                        });
+                    }
+
+                    if (currentState.characterImages && typeof currentState.characterImages === 'object') {
+                        sendUpdate({
+                            type: 'content_update',
+                            step: 'character_image_generation',
+                            message: '🖼️ Character images being generated...',
+                            timestamp: new Date().toISOString(),
+                            thinking: 'Creating character portrait images',
+                            progress: progressPercent,
+                            data: { characterImages: currentState.characterImages }
+                        });
+                    }
+
+                    if (currentState.finalVideo && typeof currentState.finalVideo === 'string') {
+                        sendUpdate({
+                            type: 'content_update',
+                            step: 'compose_output',
+                            message: '📦 Composing final output...',
+                            timestamp: new Date().toISOString(),
+                            thinking: 'Assembling final result',
+                            progress: progressPercent,
+                            data: { finalVideo: currentState.finalVideo }
                         });
                     }
 
                     // Send step completion update
                     if (lastCompletedStep) {
                         const stepName = getStepDisplayName(lastCompletedStep);
-                        const thinking = getStepThinking(lastCompletedStep, update);
+                        const thinking = getStepThinking(lastCompletedStep, currentState);
 
                         sendUpdate({
                             type: 'step_complete',
@@ -140,14 +201,14 @@ export async function POST(request: NextRequest) {
                             timestamp: new Date().toISOString(),
                             thinking,
                             progress: progressPercent,
-                            data: getStepData(lastCompletedStep, update)
+                            data: getStepData(lastCompletedStep, currentState)
                         });
                     }
 
                     // Send next step start if not completed
                     if (currentStep && currentStep !== 'completed') {
                         const nextStepName = getStepDisplayName(currentStep);
-                        const nextThinking = getStepThinking(currentStep, update);
+                        const nextThinking = getStepThinking(currentStep, currentState);
 
                         sendUpdate({
                             type: 'step_start',
@@ -161,7 +222,7 @@ export async function POST(request: NextRequest) {
                     }
 
                     // Store the final result
-                    finalResult = update;
+                    finalResult = currentState;
 
                     // Add delay for better UX (optional)
                     await new Promise(resolve => setTimeout(resolve, 500));
@@ -246,6 +307,7 @@ function getStepDisplayName(stepId: string): string {
     const stepNames: Record<string, string> = {
         'content_analysis': '🎯 Content Analysis',
         'story_generation': '🎭 Story Generation',
+        'story_refine': '🎙️ Storytelling Refinement',
         'script_writing': '📝 Script Writing',
         'character_design': '👥 Character Design',
         'character_image_generation': '🖼️ Character Images',
@@ -254,7 +316,8 @@ function getStepDisplayName(stepId: string): string {
         'media_generation': '🎨 Media Generation',
         'voice_generation': '🎵 Voice Generation',
         'video_generation': '🎥 Video Generation',
-        'video_assembly': '🎞️ Final Assembly'
+        'video_assembly': '🎞️ Final Assembly',
+        'compose_output': '📦 Compose Output'
     };
     return stepNames[stepId] || stepId;
 }
@@ -267,6 +330,7 @@ function getStepThinking(stepId: string, state: unknown): string {
     const thinkingStates: Record<string, (state: Record<string, unknown>) => string> = {
         'content_analysis': () => `Analyzing input "${s.userInput}" to determine if this should be a single-character tutorial, storytelling narrative, or multi-character film`,
         'story_generation': (state) => `Creating a compelling ${state.contentType || 'story'} narrative with engaging characters and plot development`,
+        'story_refine': () => `Refining the story into an engaging first-person narration with a strong hook and pacing`,
         'script_writing': (state) => `Converting the story into professional screenplay format with dialogue and scene directions for ${state.contentType || 'video'} production`,
         'character_design': (state) => `Developing detailed character profiles, personalities, and visual descriptions for ${(state.characters as unknown[])?.length || 'the'} characters`,
         'character_image_generation': (state) => `Generating visual representations for ${(state.characters as unknown[])?.length || 'the'} characters using AI image generation`,
@@ -275,7 +339,8 @@ function getStepThinking(stepId: string, state: unknown): string {
         'media_generation': () => `Running parallel processes: character images + scene backgrounds + voice synthesis for optimal performance`,
         'voice_generation': () => `Synthesizing character voices and dialogue from the script using advanced text-to-speech`,
         'video_generation': () => `Creating video content by combining scenes, characters, and visual elements`,
-        'video_assembly': () => `Compiling all generated content into the final video with transitions and effects`
+        'video_assembly': () => `Compiling all generated content into the final video with transitions and effects`,
+        'compose_output': () => `Composing final output from the generated assets and metadata`
     };
 
     const thinkingFn = thinkingStates[stepId];

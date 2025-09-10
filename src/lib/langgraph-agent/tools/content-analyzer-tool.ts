@@ -1,6 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { getModelForTask } from "@/config/model-switcher";
+import { getModelForTask } from "@/lib/langgraph-agent/config/model-switcher";
 import { ContentAnalysis, ContentType, PlanStep } from "@/types/video-generation-state";
 
 export const contentAnalyzerTool = tool(

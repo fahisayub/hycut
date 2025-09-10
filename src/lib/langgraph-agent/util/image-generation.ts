@@ -27,21 +27,26 @@ async function generateImageWithRetries(prompt: string, maxRetries = 2, referenc
                 // Attempt image variation prompt by including reference hint in text (OpenAI Images API lacks URL input without upload; so stick to prompt-only guidance)
                 prompt = `${prompt}\nEnsure likeness stays consistent with prior portrait of the character (same hair color, clothing style).`;
             }
-            const response = await openai.images.generate({
+            const response =  await openai.images.generate({
                 model: 'gpt-image-1',
                 prompt,
                 n: 1,
                 size: '1024x1024',
-                quality: 'standard',
-                style: 'natural',
+                quality: 'auto',
             });
 
             if (!response.data || response.data.length === 0) {
                 throw new Error('Empty image response');
             }
-            const url = response.data[0].url;
-            if (!url) throw new Error('Missing image URL');
-            return url;
+            console.log("image url", response.data);
+            const item = response.data[0] as { url?: string; b64_json?: string };
+            if (item.url && item.url.length > 0) {
+                return item.url;
+            }
+            if (item.b64_json && item.b64_json.length > 0) {
+                return `data:image/png;base64,${item.b64_json}`;
+            }
+            throw new Error('Missing image URL and base64 payload');
         } catch (error) {
             lastError = error;
             if (attempt < maxRetries) {

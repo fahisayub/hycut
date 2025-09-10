@@ -1,6 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { getModelForTask } from "@/config/model-switcher";
+import { getModelForTask } from "@/lib/langgraph-agent/config/model-switcher";
 import { SceneInfo, ContentType, CharacterDesign } from "@/types/video-generation-state";
 
 export const sceneGeneratorTool = tool(

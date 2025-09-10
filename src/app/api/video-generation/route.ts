@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { processVideoGenerationWithLangGraph } from '@/graph/video-generation';
-import { convertFromLangGraphState } from '@/state/langgraph-state';
-import { initializeLangGraphModels } from '../../../graph/model-binding';
+import { processVideoGenerationWithLangGraph } from '@/lib/langgraph-agent/graph/video-generation';
+import { convertFromLangGraphState } from '@/lib/langgraph-agent/state/langgraph-state';
+import { initializeLangGraphModels } from '@/lib/langgraph-agent/graph/model-binding';
 
 /**
  * 🚀 COMPLETE LANGGRAPH API INTEGRATION
